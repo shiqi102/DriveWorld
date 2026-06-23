@@ -5,11 +5,8 @@ import torch
 
 
 DATASET_PATHS = {
-    "womd": "/mnt/data1/wzy/datasets/waymo_open_motion",
-    "occ3d_waymo": "/mnt/data1/wzy/datasets/occ3d_waymo",
-    "occ3d_nuscenes": "/mnt/data1/wzy/datasets/occ3d_nuscenes",
-    "nuscenes": "/mnt/data1/wzy/datasets/nuscenes",
-    "nuplan": "/mnt/data1/wzy/datasets/nuplan",
+    "processed_womd": "data/womd",
+    "raw_womd": "data/raw/womd",
 }
 
 

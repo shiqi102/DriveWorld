@@ -7,22 +7,33 @@ import matplotlib.pyplot as plt
 import torch
 from torch.nn import functional as F
 
-from bev_diffusion_world_model import ConditionalBevDenoiser, DiffusionTargetConfig, build_ddim_scheduler, sample_bev_diffusion
-from womd_bev import BevShardDataset
+from config_utils import parse_args_with_config
+from model import ConditionalBevDenoiser, DiffusionTargetConfig, build_ddim_scheduler, sample_bev_diffusion
+from womd import BevShardDataset
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", default="/mnt/data1/wzy/processed/womd_bev_r1_train100")
-    parser.add_argument("--checkpoint", required=True)
+    parser.add_argument("--data_dir", default="data/womd")
+    parser.add_argument("--checkpoint", default="outputs/model_param.pt")
     parser.add_argument("--split", default="validation")
     parser.add_argument("--index", type=int, default=0)
-    parser.add_argument("--output", default="/mnt/data1/wzy/outputs/bev_diffusion_world_model_r1/sample.png")
+    parser.add_argument("--indices", default="")
+    parser.add_argument("--output", default="outputs/sample/sample.png")
+    parser.add_argument("--output_dir", default="outputs/sample")
     parser.add_argument("--num_inference_steps", type=int, default=50)
     parser.add_argument("--num_train_timesteps", type=int, default=1000)
     parser.add_argument("--vis_erode_pred", type=int, default=0)
     parser.add_argument("--vis_threshold", type=float, default=0.12)
-    return parser.parse_args()
+    return parse_args_with_config(parser)
+
+
+def parse_indices(text) -> list[int]:
+    if isinstance(text, (list, tuple)):
+        return [int(item) for item in text]
+    if text:
+        return [int(piece.strip()) for piece in str(text).split(",") if piece.strip()]
+    return []
 
 
 def refine_pred_for_display(heat: torch.Tensor, erode_iters: int = 1, threshold: float = 0.12) -> torch.Tensor:
@@ -73,12 +84,8 @@ def build_model(sample, checkpoint, device):
     return model, target_cfg, scheduler
 
 
-def main():
-    args = parse_args()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dataset = BevShardDataset(args.data_dir, args.split)
-    sample = dataset[args.index]
-    model, target_cfg, scheduler = build_model(sample, args.checkpoint, device)
+def render_sample(args, dataset, model, target_cfg, scheduler, device, index: int, output: Path):
+    sample = dataset[index]
     batch = {key: value.unsqueeze(0).to(device).float() for key, value in sample.items()}
     pred = sample_bev_diffusion(model, scheduler, batch, target_cfg, args.num_inference_steps)
     pred_stats = pred["occ_probs"]
@@ -106,11 +113,25 @@ def main():
         axes[2, col].set_title(f"diffusion sample {idx}")
         for row in range(3):
             axes[row, col].axis("off")
-    out = Path(args.output)
-    out.parent.mkdir(parents=True, exist_ok=True)
+    output.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
-    fig.savefig(out, dpi=160)
-    print(f"saved {out}")
+    fig.savefig(output, dpi=160)
+    plt.close(fig)
+    print(f"saved {output}")
+
+
+def main():
+    args = parse_args()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    dataset = BevShardDataset(args.data_dir, args.split)
+    indices = parse_indices(args.indices) or [int(args.index)]
+    model, target_cfg, scheduler = build_model(dataset[indices[0]], args.checkpoint, device)
+    if len(indices) == 1 and not args.indices:
+        outputs = [Path(args.output)]
+    else:
+        outputs = [Path(args.output_dir) / f"sample_{idx}.png" for idx in indices]
+    for idx, output in zip(indices, outputs):
+        render_sample(args, dataset, model, target_cfg, scheduler, device, idx, output)
 
 
 if __name__ == "__main__":

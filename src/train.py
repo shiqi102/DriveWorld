@@ -12,20 +12,21 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
-from bev_diffusion_world_model import (
+from config_utils import parse_args_with_config
+from model import (
     ConditionalBevDenoiser,
     DiffusionTargetConfig,
     build_ddim_scheduler,
     diffusion_loss,
     make_diffusion_target,
 )
-from womd_bev import BevShardDataset
+from womd import BevShardDataset
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", default="/mnt/data1/wzy/processed/womd_bev_r1_train100")
-    parser.add_argument("--output_dir", default="/mnt/data1/wzy/outputs/bev_diffusion_world_model_r1")
+    parser.add_argument("--data_dir", default="data/womd")
+    parser.add_argument("--output_dir", default="outputs")
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--lr", type=float, default=1e-4)
@@ -45,7 +46,7 @@ def parse_args():
     parser.add_argument("--save_every", type=int, default=1)
     parser.add_argument("--save_steps", type=int, default=500)
     parser.add_argument("--resume", default="")
-    return parser.parse_args()
+    return parse_args_with_config(parser)
 
 
 def setup_distributed():

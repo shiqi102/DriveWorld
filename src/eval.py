@@ -2,20 +2,25 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import os
 from pathlib import Path
 
 import torch
+import torch.distributed as dist
 from torch.utils.data import DataLoader
+from torch.utils.data import Subset
 from tqdm import tqdm
 
-from bev_diffusion_world_model import ConditionalBevDenoiser, DiffusionTargetConfig, build_ddim_scheduler, sample_bev_diffusion
-from womd_bev import BevShardDataset
+from config_utils import parse_args_with_config
+from model import ConditionalBevDenoiser, DiffusionTargetConfig, build_ddim_scheduler, sample_bev_diffusion
+from womd import BevShardDataset
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", default="/mnt/data1/wzy/processed/womd_bev_r1_train100")
-    parser.add_argument("--checkpoint", required=True)
+    parser.add_argument("--data_dir", default="data/womd")
+    parser.add_argument("--checkpoint", default="outputs/model_param.pt")
     parser.add_argument("--split", default="validation")
     parser.add_argument("--batch_size", type=int, default=2)
     parser.add_argument("--num_workers", type=int, default=4)
@@ -24,7 +29,26 @@ def parse_args():
     parser.add_argument("--threshold", type=float, default=0.35)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--output_json", default="")
-    return parser.parse_args()
+    return parse_args_with_config(parser)
+
+
+def setup_distributed():
+    if "RANK" not in os.environ:
+        return False, 0, 1, torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    rank = int(os.environ["RANK"])
+    world = int(os.environ["WORLD_SIZE"])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    if not torch.cuda.is_available():
+        raise RuntimeError("Distributed eval requested, but CUDA is not available.")
+    if local_rank >= torch.cuda.device_count():
+        visible = os.environ.get("CUDA_VISIBLE_DEVICES", "<not set>")
+        raise RuntimeError(
+            f"LOCAL_RANK={local_rank}, but only {torch.cuda.device_count()} CUDA device(s) are visible. "
+            f"CUDA_VISIBLE_DEVICES={visible}"
+        )
+    torch.cuda.set_device(local_rank)
+    dist.init_process_group("nccl")
+    return True, rank, world, torch.device(f"cuda:{local_rank}")
 
 
 def build_model(sample, checkpoint, device):
@@ -62,12 +86,19 @@ def build_model(sample, checkpoint, device):
 
 def main():
     args = parse_args()
+    distributed, rank, world, device = setup_distributed()
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dataset = BevShardDataset(args.data_dir, args.split)
-    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+    eval_size = len(dataset)
+    if args.max_batches:
+        eval_size = min(eval_size, int(args.max_batches) * int(args.batch_size))
+    eval_indices = list(range(eval_size))
+    if distributed:
+        eval_indices = eval_indices[rank::world]
+    eval_dataset = Subset(dataset, eval_indices)
+    loader = DataLoader(eval_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
     model, target_cfg, scheduler = build_model(dataset[0], args.checkpoint, device)
     sums = {
         "occ_iou": 0.0,
@@ -80,11 +111,10 @@ def main():
     }
     count = 0
     sample_count = 0
-    effective_batches = min(len(loader), args.max_batches) if args.max_batches else len(loader)
+    global_total_batches = math.ceil(eval_size / max(int(args.batch_size), 1))
     with torch.no_grad():
-        for batch_idx, batch in enumerate(tqdm(loader, desc="diffusion eval", total=effective_batches)):
-            if args.max_batches and batch_idx >= args.max_batches:
-                break
+        iterator = tqdm(loader, desc="diffusion eval", total=len(loader), disable=rank != 0)
+        for batch in iterator:
             batch = {key: value.to(device).float() for key, value in batch.items()}
             sample_count += int(batch["past_bev"].shape[0])
             pred = sample_bev_diffusion(model, scheduler, batch, target_cfg, args.num_inference_steps)
@@ -107,20 +137,56 @@ def main():
             sums["occ_iou_mid"] += float(horizon[third : 2 * third].mean())
             sums["occ_iou_far"] += float(horizon[2 * third :].mean())
             count += 1
+
+    if distributed:
+        values = torch.tensor(
+            [
+                sums["occ_iou"],
+                sums["occ_iou_near"],
+                sums["occ_iou_mid"],
+                sums["occ_iou_far"],
+                sums["pred_pos_ratio"],
+                sums["true_pos_ratio"],
+                sums["pred_prob_mean"],
+                float(count),
+                float(sample_count),
+            ],
+            device=device,
+            dtype=torch.float64,
+        )
+        dist.all_reduce(values, op=dist.ReduceOp.SUM)
+        keys = [
+            "occ_iou",
+            "occ_iou_near",
+            "occ_iou_mid",
+            "occ_iou_far",
+            "pred_pos_ratio",
+            "true_pos_ratio",
+            "pred_prob_mean",
+        ]
+        for idx, key in enumerate(keys):
+            sums[key] = float(values[idx].item())
+        count = int(values[7].item())
+        sample_count = int(values[8].item())
+
     metrics = {key: value / max(count, 1) for key, value in sums.items()}
     metrics["evaluated_batches"] = count
     metrics["evaluated_samples"] = sample_count
-    metrics["total_batches"] = len(loader)
+    metrics["total_batches"] = global_total_batches
     metrics["max_batches"] = int(args.max_batches)
     metrics["seed"] = int(args.seed)
-    if args.max_batches:
-        print(f"stopped after --max_batches={args.max_batches}; evaluated {count}/{len(loader)} batches.")
-    print(metrics)
-    if args.output_json:
+    metrics["distributed_world_size"] = int(world)
+    if args.max_batches and rank == 0:
+        print(f"stopped after --max_batches={args.max_batches}; evaluated {count}/{global_total_batches} batches.")
+    if rank == 0:
+        print(metrics)
+    if args.output_json and rank == 0:
         out = Path(args.output_json)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
         print(f"saved metrics: {out}")
+    if distributed:
+        dist.destroy_process_group()
 
 
 if __name__ == "__main__":

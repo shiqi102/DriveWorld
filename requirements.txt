@@ -1,0 +1,13 @@
+torch
+torchvision
+diffusers
+numpy
+tqdm
+protobuf
+tensorflow
+waymo-open-dataset-tf-2-12-0
+matplotlib
+opencv-python
+pyyaml
+shapely
+scipy

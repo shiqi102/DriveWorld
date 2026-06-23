@@ -1,0 +1,15 @@
+data_dir: data/womd
+checkpoint: outputs/model_param.pt
+split: validation
+indices:
+  - 10
+  - 50
+  - 100
+  - 300
+  - 500
+  - 1000
+output_dir: outputs/sample
+num_inference_steps: 50
+num_train_timesteps: 1000
+vis_erode_pred: 0
+vis_threshold: 0.12

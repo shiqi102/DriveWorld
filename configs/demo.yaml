@@ -1,0 +1,23 @@
+data_dir: data/womd
+checkpoint: outputs/model_param.pt
+split: validation
+indices:
+  - 10
+  - 50
+  - 100
+  - 300
+  - 500
+  - 1000
+output_dir: outputs/demo
+prefix: demo
+num_samples: 4
+num_inference_steps: 50
+threshold: 0.35
+fps: 4
+scale: 6
+video_crf: 14
+video_preset: slow
+video_pix_fmt: yuv420p
+seed: 7
+vis_erode_pred: 0
+keep_frames: false

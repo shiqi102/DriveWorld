@@ -11,13 +11,14 @@ import cv2
 import numpy as np
 import torch
 
-from bev_diffusion_world_model import (
+from config_utils import parse_args_with_config
+from model import (
     ConditionalBevDenoiser,
     DiffusionTargetConfig,
     build_ddim_scheduler,
     sample_bev_diffusion,
 )
-from womd_bev import BevShardDataset
+from womd import BevShardDataset
 
 
 RGB = Tuple[int, int, int]
@@ -31,11 +32,11 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Create enterprise-style BEV diffusion world-model demos with ego-plan risk visualization."
     )
-    parser.add_argument("--data_dir", default="/mnt/data1/wzy/processed/womd_bev_r1_train100")
-    parser.add_argument("--checkpoint", required=True)
+    parser.add_argument("--data_dir", default="data/womd")
+    parser.add_argument("--checkpoint", default="outputs/model_param.pt")
     parser.add_argument("--split", default="validation")
     parser.add_argument("--indices", default="0", help="Comma-separated validation indices, for example: 10,50,100")
-    parser.add_argument("--output_dir", default="/mnt/data1/wzy/outputs/bev_diffusion_world_model_r4_x0_sample_pred/enterprise_demo")
+    parser.add_argument("--output_dir", default="outputs/demo")
     parser.add_argument("--prefix", default="enterprise_diffusion")
     parser.add_argument("--num_samples", type=int, default=4)
     parser.add_argument("--num_inference_steps", type=int, default=50)
@@ -48,10 +49,12 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--vis_erode_pred", type=int, default=1)
     parser.add_argument("--keep_frames", action="store_true")
-    return parser.parse_args()
+    return parse_args_with_config(parser)
 
 
 def parse_indices(text: str) -> List[int]:
+    if isinstance(text, (list, tuple)):
+        return [int(item) for item in text]
     return [int(piece.strip()) for piece in text.split(",") if piece.strip()]
 
 

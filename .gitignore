@@ -1,5 +1,5 @@
-data/
-outputs/
+data/*
+outputs/*
 checkpoints/
 __pycache__/
 .pytest_cache/
@@ -19,3 +19,19 @@ __pycache__/
 *.pth
 *.ckpt
 *.safetensors
+
+!data/.gitkeep
+!data/raw/
+!data/raw/.gitkeep
+!data/raw/womd/
+!data/raw/womd/.gitkeep
+!data/womd/
+!data/womd/.gitkeep
+
+!outputs/.gitkeep
+!outputs/sample/
+outputs/sample/*
+!outputs/sample/.gitkeep
+!outputs/demo/
+outputs/demo/*
+!outputs/demo/.gitkeep

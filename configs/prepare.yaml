@@ -1,0 +1,11 @@
+womd_root: data/raw/womd
+output_dir: data/womd
+split: training
+max_files: 0
+max_scenarios: 0
+samples_per_shard: 128
+history_steps: 10
+future_steps: 80
+future_stride: 5
+bev_range: 80.0
+resolution: 0.5

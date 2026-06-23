@@ -5,13 +5,14 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from womd_bev import BevConfig, find_tfrecords, iter_scenarios, save_shard, scenario_to_sample, write_metadata
+from config_utils import parse_args_with_config
+from womd import BevConfig, find_tfrecords, iter_scenarios, save_shard, scenario_to_sample, write_metadata
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--womd_root", default="/mnt/data1/wzy/datasets/waymo_open_motion")
-    parser.add_argument("--output_dir", default="WorldModel_NuScenes_HF/data/processed/womd_bev")
+    parser.add_argument("--womd_root", default="data/raw/womd")
+    parser.add_argument("--output_dir", default="data/womd")
     parser.add_argument("--split", default="training", choices=["training", "validation", "testing"])
     parser.add_argument("--max_files", type=int, default=0)
     parser.add_argument("--max_scenarios", type=int, default=0)
@@ -21,7 +22,7 @@ def parse_args():
     parser.add_argument("--future_stride", type=int, default=5)
     parser.add_argument("--bev_range", type=float, default=80.0)
     parser.add_argument("--resolution", type=float, default=0.5)
-    return parser.parse_args()
+    return parse_args_with_config(parser)
 
 
 def main():

@@ -8,8 +8,83 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from bev_world_model import SensorTokenAdapter, TrafficLightEncoder, VectorMapEncoder
 from sensor_encoders import MultiSensorFusionEncoder
+
+
+class VectorMapEncoder(nn.Module):
+    def __init__(self, in_dim: int, hidden_dim: int, num_heads: int, depth: int = 2):
+        super().__init__()
+        self.point_mlp = nn.Sequential(
+            nn.Linear(in_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+        )
+        layer = nn.TransformerEncoderLayer(
+            hidden_dim,
+            num_heads,
+            hidden_dim * 4,
+            batch_first=True,
+            norm_first=True,
+            activation="gelu",
+        )
+        self.polyline_encoder = nn.TransformerEncoder(layer, depth)
+
+    def forward(self, map_vectors: torch.Tensor, map_vector_mask: torch.Tensor) -> torch.Tensor:
+        _, _, _, _ = map_vectors.shape
+        point_tokens = self.point_mlp(map_vectors)
+        point_valid = (map_vectors[..., :2].abs().sum(dim=-1) > 0).float()
+        denom = point_valid.sum(dim=-1, keepdim=True).clamp_min(1.0)
+        poly_tokens = (point_tokens * point_valid[..., None]).sum(dim=2) / denom
+        empty = map_vector_mask.sum(dim=1) < 0.5
+        if empty.any():
+            map_vector_mask = map_vector_mask.clone()
+            map_vector_mask[empty, 0] = 1.0
+            poly_tokens = poly_tokens.clone()
+            poly_tokens[empty, 0] = 0.0
+        key_padding_mask = map_vector_mask < 0.5
+        return self.polyline_encoder(poly_tokens, src_key_padding_mask=key_padding_mask)
+
+
+class TrafficLightEncoder(nn.Module):
+    def __init__(self, in_dim: int, hidden_dim: int, num_heads: int):
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(in_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+        )
+        self.attn = nn.MultiheadAttention(hidden_dim, num_heads, batch_first=True)
+
+    def forward(self, traffic_lights: torch.Tensor, traffic_light_mask: torch.Tensor) -> torch.Tensor:
+        b, t, l, d = traffic_lights.shape
+        tokens = self.mlp(traffic_lights.reshape(b, t * l, d))
+        mask = traffic_light_mask.reshape(b, t * l) < 0.5
+        empty = (~mask).float().sum(dim=1) < 0.5
+        if empty.any():
+            mask = mask.clone()
+            mask[empty, 0] = False
+            tokens = tokens.clone()
+            tokens[empty, 0] = 0.0
+        valid = (~mask).float().sum(dim=1, keepdim=True).clamp_min(1.0)
+        query = (tokens * (~mask)[..., None].float()).sum(dim=1, keepdim=True) / valid[..., None]
+        context, _ = self.attn(query, tokens, tokens, key_padding_mask=mask)
+        return context
+
+
+class SensorTokenAdapter(nn.Module):
+    def __init__(self, in_dim: int, hidden_dim: int):
+        super().__init__()
+        self.proj = nn.Sequential(
+            nn.Linear(in_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+        )
+
+    def forward(self, sensor_context: torch.Tensor) -> torch.Tensor:
+        return self.proj(sensor_context)
 
 
 def _same_size_max_pool(x: torch.Tensor, kernel_size: int) -> torch.Tensor:
