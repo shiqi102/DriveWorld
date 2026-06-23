@@ -4,6 +4,10 @@ BEV occupancy diffusion world model for autonomous-driving scene forecasting and
 
 DriveWorld predicts future BEV occupancy and occupancy flow from historical BEV scenes, map priors, traffic-light states, and agent features. The demo searches lane-following ego candidates on the predicted world and scores collision, uncertainty, off-road, smoothness, and progress costs.
 
+## Demo
+
+<video src="assets/demo_500.mp4" controls muted loop playsinline width="100%"></video>
+
 ## Highlights
 
 - Conditional DDIM diffusion model for future BEV occupancy generation.

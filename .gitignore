@@ -20,6 +20,8 @@ __pycache__/
 *.ckpt
 *.safetensors
 
+!assets/demo_500.mp4
+
 !data/.gitkeep
 !data/raw/
 !data/raw/.gitkeep
