@@ -13,7 +13,7 @@ It corresponds to the previous best checkpoint `epoch_016.pt`.
 Run evaluation:
 
 ```bash
-python src/eval.py --config configs/eval.yaml
+python scripts/eval.py --config configs/eval.yaml
 ```
 
 The latest model version reached approximately:
@@ -45,3 +45,4 @@ A useful demo should show:
 - Long-horizon occupancy prediction remains harder than near-horizon prediction.
 - The planner is a demo-level lane-graph risk scorer, not a full vehicle planner.
 - Checkpoints and processed datasets are intentionally not stored in Git.
+

@@ -6,7 +6,9 @@ DriveWorld predicts future BEV occupancy and occupancy flow from historical BEV 
 
 ## Demo
 
-<video src="assets/demo_500.mp4" controls muted loop playsinline width="100%"></video>
+[![DriveWorld BEV diffusion demo](assets/demo_500.gif)](assets/demo_500.mp4)
+
+Click the preview to open the MP4 rollout.
 
 ## Highlights
 
@@ -64,7 +66,7 @@ DriveWorld/
     MODEL.md
     DEMO.md
     RESULTS.md
-  src/
+  scripts/
     model.py                    # diffusion denoiser, DDIM scheduler helpers, loss, sampling
     train.py                    # distributed training entry
     eval.py                     # IoU evaluation entry
@@ -74,11 +76,9 @@ DriveWorld/
     prepare_womd_scenarios.py   # WOMD -> BEV shard preprocessing
     sensor_encoders.py          # optional camera/LiDAR token encoder
     check_env.py                # environment sanity check
-  tools/
-    inspect_data.py             # processed shard inspector
-    export_release_demo.py      # copy demo artifacts into assets/
   assets/
-    .gitkeep                    # place teaser images/videos here
+    demo_500.gif                # README preview
+    demo_500.mp4                # README rollout video
   data/
     raw/womd/                   # optional raw WOMD data for preprocessing
     womd/                       # processed WOMD BEV shards
@@ -109,7 +109,7 @@ For CUDA training, install the PyTorch build that matches your CUDA version from
 Check environment:
 
 ```bash
-python src/check_env.py
+python scripts/check_env.py
 ```
 
 ### Checkpoint
@@ -139,7 +139,7 @@ data/raw/womd/
 Convert raw WOMD scenarios into BEV shard files:
 
 ```bash
-python src/prepare_womd_scenarios.py --config configs/prepare.yaml
+python scripts/prepare_womd_scenarios.py --config configs/prepare.yaml
 ```
 
 `configs/prepare.yaml` writes processed data to `data/womd` by default. The training and validation commands expect this structure:
@@ -156,19 +156,13 @@ data/womd/
 To process a specific split, override the YAML value:
 
 ```bash
-python src/prepare_womd_scenarios.py --config configs/prepare.yaml --split validation
+python scripts/prepare_womd_scenarios.py --config configs/prepare.yaml --split validation
 ```
 
 For a quick smoke test, limit the number of source TFRecord files:
 
 ```bash
-python src/prepare_womd_scenarios.py --config configs/prepare.yaml --split training --max_files 2
-```
-
-Inspect processed shards:
-
-```bash
-python tools/inspect_data.py --data_dir data/womd --split validation --index 0
+python scripts/prepare_womd_scenarios.py --config configs/prepare.yaml --split training --max_files 2
 ```
 
 ## Train And Evaluate
@@ -176,31 +170,31 @@ python tools/inspect_data.py --data_dir data/womd --split validation --index 0
 Train:
 
 ```bash
-torchrun --standalone --nproc_per_node=8 src/train.py --config configs/train.yaml
+torchrun --standalone --nproc_per_node=8 scripts/train.py --config configs/train.yaml
 ```
 
 Resume training:
 
 ```bash
-torchrun --standalone --nproc_per_node=8 src/train.py --config configs/train.yaml --resume outputs/last.pt
+torchrun --standalone --nproc_per_node=8 scripts/train.py --config configs/train.yaml --resume outputs/last.pt
 ```
 
 Evaluate:
 
 ```bash
-python src/eval.py --config configs/eval.yaml
+python scripts/eval.py --config configs/eval.yaml
 ```
 
 Generate sample PNGs:
 
 ```bash
-python src/sample.py --config configs/sample.yaml
+python scripts/sample.py --config configs/sample.yaml
 ```
 
 Generate enterprise demo PNG/MP4 files:
 
 ```bash
-python src/_demo.py --config configs/demo.yaml
+python scripts/_demo.py --config configs/demo.yaml
 ```
 
 The demo writes:
@@ -213,16 +207,10 @@ outputs/demo/demo_<index>.json
 
 The six-panel demo contains current BEV context, GT future occupancy, predicted future occupancy, multi-sample future modes, occupancy flow, and lane-following ego risk planning.
 
-Collect representative demo artifacts for README or release pages:
-
-```bash
-python tools/export_release_demo.py --demo_dir outputs/demo --assets_dir assets
-```
-
 Any YAML value can be overridden from the command line:
 
 ```bash
-python src/_demo.py --config configs/demo.yaml --indices 10,50,100 --scale 5
+python scripts/_demo.py --config configs/demo.yaml --indices 10,50,100 --scale 5
 ```
 
 ## Configs
@@ -230,11 +218,11 @@ python src/_demo.py --config configs/demo.yaml --indices 10,50,100 --scale 5
 Each entry point has one matching YAML file:
 
 ```text
-configs/prepare.yaml -> src/prepare_womd_scenarios.py
-configs/train.yaml   -> src/train.py
-configs/eval.yaml    -> src/eval.py
-configs/sample.yaml  -> src/sample.py
-configs/demo.yaml    -> src/_demo.py
+configs/prepare.yaml -> scripts/prepare_womd_scenarios.py
+configs/train.yaml   -> scripts/train.py
+configs/eval.yaml    -> scripts/eval.py
+configs/sample.yaml  -> scripts/sample.py
+configs/demo.yaml    -> scripts/_demo.py
 ```
 
 The YAML keys directly match command-line argument names.
@@ -286,3 +274,4 @@ If this repository is useful for your work, please cite the related datasets and
 ## Acknowledgements
 
 This project builds on open-source tools including PyTorch, Hugging Face Diffusers, Waymo Open Dataset tools, NumPy, OpenCV, Matplotlib, and Shapely.
+

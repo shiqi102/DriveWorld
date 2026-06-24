@@ -27,19 +27,19 @@ Only `training` and `validation` are required for the default training and evalu
 Convert raw WOMD scenarios into BEV tensors:
 
 ```bash
-python src/prepare_womd_scenarios.py --config configs/prepare.yaml
+python scripts/prepare_womd_scenarios.py --config configs/prepare.yaml
 ```
 
 Process a single split:
 
 ```bash
-python src/prepare_womd_scenarios.py --config configs/prepare.yaml --split validation
+python scripts/prepare_womd_scenarios.py --config configs/prepare.yaml --split validation
 ```
 
 Run a small smoke test:
 
 ```bash
-python src/prepare_womd_scenarios.py --config configs/prepare.yaml --split training --max_files 2
+python scripts/prepare_womd_scenarios.py --config configs/prepare.yaml --split training --max_files 2
 ```
 
 ## Processed Format
@@ -70,13 +70,3 @@ ego_future
 ```
 
 The default model uses `past_bev`, `map_bev`, `map_vectors`, `traffic_lights`, and `agent_features` as conditions, and predicts `future_occ` plus optional `future_flow`.
-
-## Inspect Data
-
-Use the inspector before training:
-
-```bash
-python tools/inspect_data.py --data_dir data/womd --split validation --index 0
-```
-
-This prints shard counts, sample tensor shapes, occupancy ratios, and metadata.
